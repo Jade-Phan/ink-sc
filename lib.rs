@@ -5,36 +5,34 @@ use ink_lang as ink;
 #[ink::contract]
 mod ink_sc {
     use ink_env::AccountId;
+    use ink::storage::traits::SpreadAllocate;
 
     /// Defines the storage of your contract.
     /// Add new fields to the below struct in order
     /// to add new static storage fields to your contract.
     #[ink(storage)]
+    #[derive(SpreadAllocate)]
     pub struct InkSc {
         /// Stores a single `bool` value on the storage.
         owner: AccountId,
         id_to_owner:ink_storage::Mapping<u64, AccountId>,
-        owner_tokens: ink_storage::Mapping<AccountId, u32>
+        owner_tokens: ink_storage::Mapping<AccountId, u8>
     }
 
     impl InkSc {
-        /// Constructor that initializes the `bool` value to the given `init_value`.
-        #[ink(constructor)]
-        pub fn new(init_value: bool) -> Self {
-            Self { value: init_value }
-        }
-
-        /// Constructor that initializes the `bool` value to `false`.
-        ///
-        /// Constructors can delegate to other constructors.
         #[ink(constructor)]
         pub fn default() -> Self {
-            Self::new(Default::default())
+            ink_lang::utils::initialize_contract(Self::init)
+        }
+
+        fn init(&mut self){
+            let caller = Self::env().caller();
+            self.id_to_owner.insert(0,&caller);
+            self.owner_tokens.insert(&caller,0);
+            self.caller = caller;
         }
 
         /// A message that can be called on instantiated contracts.
-        /// This one flips the value of the stored `bool` from `true`
-        /// to `false` and vice versa.
         #[ink(message)]
         pub fn flip(&mut self) {
             self.value = !self.value;
