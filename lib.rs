@@ -113,6 +113,11 @@ mod ink_sc {
         pub fn get_owner_of_token(&self, token_id: u32) -> AccountId {
             self.id_to_owner.get(token_id).unwrap()
         }
+
+        #[ink(message)]
+        pub fn count_of_owner(&self, account: AccountId) -> u32 {
+            self.owner_tokens.get(&account).unwrap()
+        }
     }
 
     /// Unit tests in Rust are normally defined within such a `#[cfg(test)]`
