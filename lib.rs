@@ -6,7 +6,6 @@ use ink_lang as ink;
 mod ink_sc {
     use ink_env::AccountId;
     use ink::storage::traits::SpreadAllocate;
-
     /// Defines the storage of your contract.
     /// Add new fields to the below struct in order
     /// to add new static storage fields to your contract.
@@ -15,14 +14,41 @@ mod ink_sc {
     pub struct InkSc {
         /// Stores a single `bool` value on the storage.
         owner: AccountId,
-        id_to_owner:ink_storage::Mapping<u64, AccountId>,
-        owner_tokens: ink_storage::Mapping<AccountId, u8>
+        id_to_owner:ink_storage::Mapping<u32, AccountId>,
+        owner_tokens: ink_storage::Mapping<AccountId, u32>
     }
 
+    #[ink(event)]
+    pub struct Mint{
+        #[ink(topic)]
+        receiver: AccountId,
+        #[ink(topic)]
+        token_id:u32,
+    }
+
+    #[ink(event)]
+    pub struct Transfer{
+        #[ink(topic)]
+        from: AccountId,
+        #[ink(topic)]
+        to:AccountId,
+        #[ink(topic)]
+        token_id: u32,
+    }
+
+    /// Error that occurred
+    #[derive(Debug, PartialEq, Eq, scale::Encode, scale::Decode)]
+    #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
+    pub enum Error {
+        /// Returned if not the owner
+        NotOwner,
+        /// Returned if the account doesnt own the nft token id
+        NotOwnedToken,
+    }
     impl InkSc {
         #[ink(constructor)]
         pub fn default() -> Self {
-            ink_lang::utils::initialize_contract(Self::init)
+            ink_lang::utils::initialize_contract(|contract|Self::init(contract))
         }
 
         fn init(&mut self){
@@ -32,16 +58,55 @@ mod ink_sc {
             self.caller = caller;
         }
 
-        /// A message that can be called on instantiated contracts.
-        #[ink(message)]
-        pub fn flip(&mut self) {
-            self.value = !self.value;
+         #[ink(message)]
+        pub fn mint(&mut self, receiver: AccountId, token_id: u32) -> Result<()> {
+             // only owner can mint
+            if Self::env().caller() == self.owner {
+                self.id_to_owner.insert(token_id, &receiver);
+                if let Some(n) = self.owner_tokens.get(&receiver){
+                    self.owner_tokens.insert(receiver, n+1);
+                } else {
+                    self.owner_tokens.insert(receiver, 1);
+                }
+                self.env().emit_event(Mint{
+                    receiver: receiver,
+                    token_id: token_id,
+                });
+                Ok(())
+            } else {
+                Err(Error::NotOwner)
+            }
         }
 
-        /// Simply returns the current value of our `bool`.
+        fn is_owner_of(&self, token_id: u32, account: &AccountId) -> bool {
+            let owner = self.id_to_owner.get(&token_id);
+            match owner {
+                Some(acc) => return if acc != owner {false} else {true},
+                None => false,
+            }
+        }
+
         #[ink(message)]
-        pub fn get(&self) -> bool {
-            self.value
+        pub fn transfer(&mut self, from: AccountId, to: AccountId, token_id: u32) -> Result<()> {
+            if !self.is_owner_of(token_id, &from){
+                false
+            }
+            self.id_to_owner.insert(token_id, &to);
+            let count_of_from = *self.owner_tokens.get(&from).unwrap();
+            let count_of_to = *self.owner_tokens.get(&to).unwrap();
+            self.owner_tokens.insert(from, count_of_from-1);
+            self.owner_tokens.insert(to, count_of_to+1);
+            self.env().emit_event(Transfer{
+                from: from,
+                to:to,
+                token_id: token_id,
+            });
+            Ok(())
+        }
+
+        #[ink(message)]
+        pub fn get_owner_of_token(&self, token_id: u32) -> AccountId {
+            self.id_to_owner.get(token_id).unwrap()
         }
     }
 
@@ -60,6 +125,7 @@ mod ink_sc {
         #[ink::test]
         fn default_works() {
             let ink_sc = InkSc::default();
+            let
             assert_eq!(ink_sc.get(), false);
         }
 
