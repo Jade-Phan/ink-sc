@@ -58,8 +58,6 @@ mod ink_sc {
 
         fn init(&mut self){
             let caller = Self::env().caller();
-            self.id_to_owner.insert(0,&caller);
-            self.owner_tokens.insert(&caller,&0);
             self.owner = caller;
         }
 
@@ -96,6 +94,12 @@ mod ink_sc {
             if !self.is_owner_of(token_id, &from){
                 return Err(Error::NotOwnedToken)
             }
+
+            // check if the caller is the owner of the token
+            if self.env().caller() != from {
+                return Err(Error::NotOwnedToken)
+            }
+
             self.id_to_owner.insert(token_id, &to);
             let count_of_from = self.owner_tokens.get(&from).unwrap();
             let count_of_to = self.owner_tokens.get(&to).unwrap();
@@ -167,7 +171,7 @@ mod ink_sc {
 
             //Then
             assert_eq!(ink_sc.owner_tokens(account_one),0);
-            assert_eq!(ink_sc.owner_tokens(account_one),1);
+            assert_eq!(ink_sc.owner_tokens(account_two),1);
         }
     }
 }
