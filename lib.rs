@@ -4,8 +4,10 @@ use ink_lang as ink;
 
 #[ink::contract]
 mod ink_sc {
-    use ink_env::AccountId;
-    use ink::storage::traits::SpreadAllocate;
+    use ink_storage::{
+        traits::SpreadAllocate,
+        Mapping,
+    };
     /// Defines the storage of your contract.
     /// Add new fields to the below struct in order
     /// to add new static storage fields to your contract.
@@ -14,8 +16,8 @@ mod ink_sc {
     pub struct InkSc {
         /// Stores a single `bool` value on the storage.
         owner: AccountId,
-        id_to_owner:ink_storage::Mapping<u32, AccountId>,
-        owner_tokens: ink_storage::Mapping<AccountId, u32>
+        id_to_owner: Mapping<u32, AccountId>,
+        owner_tokens: Mapping<AccountId, u32>
     }
 
     #[ink(event)]
@@ -45,6 +47,9 @@ mod ink_sc {
         /// Returned if the account doesnt own the nft token id
         NotOwnedToken,
     }
+
+    pub type Result<T> = core::result::Result<T, Error>;
+
     impl InkSc {
         #[ink(constructor)]
         pub fn default() -> Self {
@@ -54,8 +59,8 @@ mod ink_sc {
         fn init(&mut self){
             let caller = Self::env().caller();
             self.id_to_owner.insert(0,&caller);
-            self.owner_tokens.insert(&caller,0);
-            self.caller = caller;
+            self.owner_tokens.insert(&caller,&0);
+            self.owner = caller;
         }
 
          #[ink(message)]
@@ -64,9 +69,9 @@ mod ink_sc {
             if Self::env().caller() == self.owner {
                 self.id_to_owner.insert(token_id, &receiver);
                 if let Some(n) = self.owner_tokens.get(&receiver){
-                    self.owner_tokens.insert(receiver, n+1);
+                    self.owner_tokens.insert(receiver, &(n+1));
                 } else {
-                    self.owner_tokens.insert(receiver, 1);
+                    self.owner_tokens.insert(receiver, &1);
                 }
                 self.env().emit_event(Mint{
                     receiver: receiver,
@@ -81,7 +86,7 @@ mod ink_sc {
         fn is_owner_of(&self, token_id: u32, account: &AccountId) -> bool {
             let owner = self.id_to_owner.get(&token_id);
             match owner {
-                Some(acc) => return if acc != owner {false} else {true},
+                Some(acc) => return if acc != *account {false} else {true},
                 None => false,
             }
         }
@@ -89,13 +94,13 @@ mod ink_sc {
         #[ink(message)]
         pub fn transfer(&mut self, from: AccountId, to: AccountId, token_id: u32) -> Result<()> {
             if !self.is_owner_of(token_id, &from){
-                false
+                return Err(Error::NotOwnedToken)
             }
             self.id_to_owner.insert(token_id, &to);
-            let count_of_from = *self.owner_tokens.get(&from).unwrap();
-            let count_of_to = *self.owner_tokens.get(&to).unwrap();
-            self.owner_tokens.insert(from, count_of_from-1);
-            self.owner_tokens.insert(to, count_of_to+1);
+            let count_of_from = self.owner_tokens.get(&from).unwrap();
+            let count_of_to = self.owner_tokens.get(&to).unwrap();
+            self.owner_tokens.insert(from, &(count_of_from-1));
+            self.owner_tokens.insert(to, &(count_of_to+1));
             self.env().emit_event(Transfer{
                 from: from,
                 to:to,
@@ -123,19 +128,41 @@ mod ink_sc {
 
         /// We test if the default constructor does its job.
         #[ink::test]
-        fn default_works() {
+        fn default_initializer() {
             let ink_sc = InkSc::default();
-            let
-            assert_eq!(ink_sc.get(), false);
+            let token_count = ink_sc.owner_tokens(AccountId::from([0x1;32]));
+            assert_eq!(token_count, 0);
         }
 
-        /// We test a simple use case of our contract.
         #[ink::test]
-        fn it_works() {
-            let mut ink_sc = InkSc::new(false);
-            assert_eq!(ink_sc.get(), false);
-            ink_sc.flip();
-            assert_eq!(ink_sc.get(), true);
+        fn mint() {
+            //Given
+            let mut ink_sc = InkSc::default();
+            let account_one = AccountId::from([0x1; 32]);
+            let token_id = 95;
+
+            //When
+            ink_sc.mint(account_one, token_id).expect("Expected result");
+
+            //Then
+            assert_eq!(ink_sc.get_owner_of_token(95),account_one);
+        }
+
+        #[ink::test]
+        fn transfer() {
+            //Given
+            let mut ink_sc = InkSc::default();
+            let account_one = AccountId::from([0x1; 32]);
+            let account_two = AccountId::from([0x2; 32]);
+            let token_id = 95;
+
+            //When
+            ink_sc.mint(account_one, token_id);
+            ink_sc.transfer(account_one, account_two, token_id);
+
+            //Then
+            assert_eq!(ink_sc.owner_tokens(account_one),0);
+            assert_eq!(ink_sc.owner_tokens(account_one),1);
         }
     }
 }
