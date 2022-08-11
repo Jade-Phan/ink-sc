@@ -102,7 +102,7 @@ mod ink_sc {
 
             self.id_to_owner.insert(token_id, &to);
             let count_of_from = self.owner_tokens.get(&from).unwrap();
-            let count_of_to = self.owner_tokens.get(&to).unwrap();
+            let count_of_to = self.owner_tokens.get(&to).unwrap_or(0);
             self.owner_tokens.insert(from, &(count_of_from-1));
             self.owner_tokens.insert(to, &(count_of_to+1));
             self.env().emit_event(Transfer{
@@ -134,13 +134,16 @@ mod ink_sc {
 
         /// Imports `ink_lang` so we can use `#[ink::test]`.
         use ink_lang as ink;
+        use crate::ink_sc;
 
         /// We test if the default constructor does its job.
         #[ink::test]
         fn default_initializer() {
             let ink_sc = InkSc::default();
-            let token_count = ink_sc.owner_tokens(AccountId::from([0x1;32]));
-            assert_eq!(token_count, 0);
+            let token_count = ink_sc.owner_tokens.get(AccountId::from([0x1;32]));
+
+            assert_eq!(ink_sc.owner, AccountId::from([0x1;32]));
+            assert_eq!(token_count, None);
         }
 
         #[ink::test]
@@ -161,6 +164,7 @@ mod ink_sc {
         fn transfer() {
             //Given
             let mut ink_sc = InkSc::default();
+            ink_env::debug_println!("created new instance at {:?}", ink_sc.owner);
             let account_one = AccountId::from([0x1; 32]);
             let account_two = AccountId::from([0x2; 32]);
             let token_id = 95;
@@ -170,8 +174,8 @@ mod ink_sc {
             ink_sc.transfer(account_one, account_two, token_id);
 
             //Then
-            assert_eq!(ink_sc.owner_tokens(account_one),0);
-            assert_eq!(ink_sc.owner_tokens(account_two),1);
+            assert_eq!(ink_sc.owner_tokens.get(account_one),Some(0));
+            assert_eq!(ink_sc.owner_tokens.get(account_two),Some(1));
         }
     }
 }
